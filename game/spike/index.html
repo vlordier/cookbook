@@ -88,6 +88,7 @@
     .start-overlay button:hover { background: #2a2a2a; }
     .start-overlay button:disabled { opacity: 0.35; cursor: default; }
     #status { font-size: 11px; color: #555; min-height: 16px; }
+    #voice-status { position: absolute; bottom: 8px; left: 8px; font-size: 10px; color: rgba(0,230,140,0.55); pointer-events: none; }
   </style>
 </head>
 <body>
@@ -99,6 +100,8 @@
       <canvas id="overlay"></canvas>
       <span class="pip-label">HANDS CAM</span>
     </div>
+
+    <span id="voice-status"></span>
 
     <div class="start-overlay" id="startOverlay">
       <h1>Hand Steering Racer</h1>

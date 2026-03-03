@@ -1,4 +1,5 @@
 import { HandLandmarker, FilesetResolver } from '@mediapipe/tasks-vision'
+import { MicVAD } from '@ricky0123/vad-web'
 
 const WASM_PATH  = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
 const MODEL_URL  = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task'
@@ -18,17 +19,21 @@ const HAND_CONNECTIONS = [
 const gameCanvas   = document.getElementById('game')
 const videoEl      = document.getElementById('video')
 const overlayEl    = document.getElementById('overlay')
-const statusEl     = document.getElementById('status')
-const btnStart     = document.getElementById('btnStart')
-const startOverlay = document.getElementById('startOverlay')
+const statusEl      = document.getElementById('status')
+const voiceStatusEl = document.getElementById('voice-status')
+const btnStart      = document.getElementById('btnStart')
+const startOverlay  = document.getElementById('startOverlay')
 
 let handLandmarker    = null
 let animFrameId       = null
 let smoothedAngle     = 0
 let lastDetectionTime = 0
+let pendingSpeedTarget = null
+let workerBusy        = false
 const DETECTION_INTERVAL_MS = 33   // ~30 fps for hand detection
 
 function setStatus(msg) { statusEl.textContent = msg }
+function setVoiceStatus(msg) { if (voiceStatusEl) voiceStatusEl.textContent = msg }
 
 // ── Canvas constants ──────────────────────────────────────────────────────────
 
@@ -75,7 +80,8 @@ function makeObject(i) {
 const N_OBJECTS = 30
 const gameState = {
   roadOffset: 0,
-  speed:      0.010,
+  speedKmh:   100,
+  speed:      0.010,   // derived; always = speedKmh * 0.0001
   objects:    Array.from({ length: N_OBJECTS }, (_, i) => makeObject(i)),
 }
 
@@ -432,7 +438,7 @@ function drawRoad(ctx, vpX) {
 // ── HUD ──────────────────────────────────────────────────────────────────────
 
 function drawHUD(ctx, steerAngle) {
-  const speedKmh = 100
+  const speedKmh = gameState.speedKmh
   ctx.save()
   ctx.textAlign    = 'right'
   ctx.textBaseline = 'top'
@@ -506,6 +512,12 @@ function drawHandSkeleton(ctx, landmarks, W, H) {
 
 function loop() {
   animFrameId = requestAnimationFrame(loop)
+
+  if (pendingSpeedTarget !== null) {
+    gameState.speedKmh = pendingSpeedTarget
+    gameState.speed    = gameState.speedKmh * 0.0001
+    pendingSpeedTarget = null
+  }
 
   // Advance road scroll
   gameState.roadOffset = (gameState.roadOffset + gameState.speed) % 1.0
@@ -584,6 +596,46 @@ async function start() {
   startOverlay.style.display = 'none'
 
   loop()
+
+  // Launch audio worker
+  const audioWorker = new Worker(new URL('./audio-worker.js', import.meta.url), { type: 'module' })
+  audioWorker.onmessage = ({ data }) => {
+    if (data.type === 'ready') {
+      setVoiceStatus('Voice ready — say "speed" or "slow"')
+      startVAD(audioWorker)
+    }
+    if (data.type === 'progress') {
+      setVoiceStatus(`Loading audio model… ${(data.progress.progress * 100 | 0)}%`)
+    }
+    if (data.type === 'result') {
+      workerBusy = false
+      if (data.keyword === 'speed')      pendingSpeedTarget = 120
+      else if (data.keyword === 'slow') pendingSpeedTarget = 0
+    }
+  }
+  audioWorker.postMessage({ type: 'load' })
+}
+
+async function startVAD(worker) {
+  const vad = await MicVAD.new({
+    baseAssetPath: '/',   // worklet + model both load from /public
+    model: 'v5',          // silero_vad_v5.onnx
+    ortConfig(ort) {
+      // Same CDN fix as the audio worker — vad-web shares onnxruntime-web 1.24.2
+      ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.2/dist/'
+    },
+    onSpeechEnd(audio) {
+      // audio is Float32Array @ 16 kHz — already decoded, no MediaRecorder needed
+      if (workerBusy) return
+      workerBusy = true
+      const copy = new Float32Array(audio)   // copy so we can safely transfer the buffer
+      worker.postMessage(
+        { type: 'transcribe', audioData: copy.buffer, sampleRate: 16000 },
+        [copy.buffer]                        // zero-copy transfer
+      )
+    },
+  })
+  vad.start()
 }
 
 function stop() {
