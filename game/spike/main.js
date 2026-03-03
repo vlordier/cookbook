@@ -30,6 +30,8 @@ let smoothedAngle     = 0
 let lastDetectionTime = 0
 let pendingSpeedTarget = null
 let workerBusy        = false
+let musicCtx          = null
+let musicLoopId       = null
 const DETECTION_INTERVAL_MS = 33   // ~30 fps for hand detection
 
 function setStatus(msg) { statusEl.textContent = msg }
@@ -82,6 +84,8 @@ const gameState = {
   roadOffset: 0,
   speedKmh:   100,
   speed:      0.010,   // derived; always = speedKmh * 0.0001
+  lightsOn:   false,
+  musicOn:    false,
   objects:    Array.from({ length: N_OBJECTS }, (_, i) => makeObject(i)),
 }
 
@@ -435,6 +439,163 @@ function drawRoad(ctx, vpX) {
   }
 }
 
+// ── Music synthesizer (techno / electro) ─────────────────────────────────────
+const TECHNO_BPM = 132
+const STEP       = 60 / TECHNO_BPM / 4   // 16th-note step in seconds
+
+// 16-step drum + bass patterns (one bar loops forever)
+const KICK_PAT  = [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0]   // 4-on-the-floor
+const HIHAT_PAT = [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,1]   // 8th-notes + roll
+const SNARE_PAT = [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0]   // 2 and 4
+// Bass: MIDI notes (C1=24), 0 = rest — classic driving techno line
+const BASS_PAT  = [36,0,36,39, 0,36,0,43, 41,0,39,0, 36,0,43,41]
+
+function midiToHz(midi) { return 440 * Math.pow(2, (midi - 69) / 12) }
+
+function scheduleKick(ctx, t) {
+  const osc = ctx.createOscillator()
+  const g   = ctx.createGain()
+  osc.frequency.setValueAtTime(160, t)
+  osc.frequency.exponentialRampToValueAtTime(40, t + 0.08)
+  g.gain.setValueAtTime(1.2, t)
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.28)
+  osc.connect(g); g.connect(ctx.destination)
+  osc.start(t); osc.stop(t + 0.32)
+}
+
+function scheduleHihat(ctx, t, open) {
+  const dur = open ? 0.10 : 0.035
+  const buf  = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate)
+  const data = buf.getChannelData(0)
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1
+  const src    = ctx.createBufferSource()
+  const filter = ctx.createBiquadFilter()
+  const g      = ctx.createGain()
+  src.buffer         = buf
+  filter.type        = 'highpass'
+  filter.frequency.value = 7500
+  g.gain.setValueAtTime(0.25, t)
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur)
+  src.connect(filter); filter.connect(g); g.connect(ctx.destination)
+  src.start(t)
+}
+
+function scheduleSnare(ctx, t) {
+  // Noise body
+  const dur  = 0.14
+  const buf  = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate)
+  const data = buf.getChannelData(0)
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1
+  const src    = ctx.createBufferSource()
+  const filter = ctx.createBiquadFilter()
+  const g      = ctx.createGain()
+  src.buffer         = buf
+  filter.type        = 'bandpass'
+  filter.frequency.value = 2200
+  filter.Q.value     = 0.8
+  g.gain.setValueAtTime(0.7, t)
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur)
+  src.connect(filter); filter.connect(g); g.connect(ctx.destination)
+  src.start(t)
+  // Tone click
+  const osc = ctx.createOscillator()
+  const og  = ctx.createGain()
+  osc.frequency.value = 220
+  og.gain.setValueAtTime(0.5, t)
+  og.gain.exponentialRampToValueAtTime(0.001, t + 0.06)
+  osc.connect(og); og.connect(ctx.destination)
+  osc.start(t); osc.stop(t + 0.07)
+}
+
+function scheduleBass(ctx, t, midi) {
+  const osc    = ctx.createOscillator()
+  const filter = ctx.createBiquadFilter()
+  const g      = ctx.createGain()
+  osc.type           = 'sawtooth'
+  osc.frequency.value = midiToHz(midi)
+  filter.type        = 'lowpass'
+  filter.frequency.setValueAtTime(900, t)
+  filter.frequency.exponentialRampToValueAtTime(280, t + STEP * 0.88)
+  filter.Q.value     = 4
+  g.gain.setValueAtTime(0.55, t)
+  g.gain.exponentialRampToValueAtTime(0.001, t + STEP * 0.82)
+  osc.connect(filter); filter.connect(g); g.connect(ctx.destination)
+  osc.start(t); osc.stop(t + STEP)
+}
+
+function scheduleBar(ctx, startTime) {
+  for (let i = 0; i < 16; i++) {
+    const t = startTime + i * STEP
+    if (KICK_PAT[i])  scheduleKick(ctx, t)
+    if (HIHAT_PAT[i]) scheduleHihat(ctx, t, i === 14)   // open hat on last step
+    if (SNARE_PAT[i]) scheduleSnare(ctx, t)
+    if (BASS_PAT[i])  scheduleBass(ctx, t, BASS_PAT[i])
+  }
+  return startTime + 16 * STEP
+}
+
+function startMusic() {
+  if (musicCtx) return
+  gameState.musicOn = true
+  musicCtx = new AudioContext()
+  let nextStart = musicCtx.currentTime + 0.05
+  function loop() {
+    nextStart = scheduleBar(musicCtx, nextStart)
+    const delay = (nextStart - musicCtx.currentTime - 0.3) * 1000
+    musicLoopId = setTimeout(loop, Math.max(0, delay))
+  }
+  loop()
+}
+
+function stopMusic() {
+  if (!musicCtx) return
+  gameState.musicOn = false
+  clearTimeout(musicLoopId)
+  musicLoopId = null
+  musicCtx.close()
+  musicCtx = null
+}
+
+// ── Headlights ────────────────────────────────────────────────────────────────
+
+function drawHeadlights(ctx, vpX) {
+  if (!gameState.lightsOn) return
+  ctx.save()
+
+  // Clip to road trapezoid so light stays on the road surface
+  ctx.beginPath()
+  ctx.moveTo(vpX - ROAD_HW_TOP, HORIZON_Y)
+  ctx.lineTo(vpX + ROAD_HW_TOP, HORIZON_Y)
+  ctx.lineTo(GW / 2 + ROAD_HW_BTM, ROAD_BOTTOM)
+  ctx.lineTo(GW / 2 - ROAD_HW_BTM, ROAD_BOTTOM)
+  ctx.closePath()
+  ctx.clip()
+
+  // Two beams, one per headlight, each covering half the road width
+  for (const sign of [-1, 1]) {
+    // Radial gradient originating from headlight position just below ROAD_BOTTOM
+    const hx   = GW / 2 + sign * GW * 0.085
+    const hy   = ROAD_BOTTOM + 60
+    const grad = ctx.createRadialGradient(hx, hy, 15, hx, hy, GH * 0.72)
+    grad.addColorStop(0,    'rgba(255,252,195,0.28)')
+    grad.addColorStop(0.30, 'rgba(255,250,188,0.16)')
+    grad.addColorStop(0.65, 'rgba(255,248,180,0.06)')
+    grad.addColorStop(1,    'rgba(255,245,170,0)')
+
+    // Trapezoid: near edge spans center → outer, far edge narrows to vanishing point
+    ctx.beginPath()
+    ctx.moveTo(GW / 2 + sign * GW * 0.002, ROAD_BOTTOM)
+    ctx.lineTo(GW / 2 + sign * ROAD_HW_BTM, ROAD_BOTTOM)
+    ctx.lineTo(vpX + sign * ROAD_HW_TOP, HORIZON_Y)
+    ctx.lineTo(vpX, HORIZON_Y)
+    ctx.closePath()
+    ctx.fillStyle = grad
+    ctx.fill()
+  }
+
+  ctx.restore()
+}
+
 // ── HUD ──────────────────────────────────────────────────────────────────────
 
 function drawHUD(ctx, steerAngle) {
@@ -448,6 +609,15 @@ function drawHUD(ctx, steerAngle) {
   ctx.font         = `${GH * 0.024 | 0}px monospace`
   ctx.fillStyle    = 'rgba(0,230,140,0.65)'
   ctx.fillText('km/h', GW - 14, 14 + GH * 0.075)
+
+  // Lights indicator
+  ctx.font      = `${GH * 0.022 | 0}px monospace`
+  ctx.fillStyle = gameState.lightsOn ? 'rgba(255,252,120,0.92)' : 'rgba(255,255,255,0.22)'
+  ctx.fillText('◉ LIGHTS', GW - 14, 14 + GH * 0.115)
+
+  // Music indicator
+  ctx.fillStyle = gameState.musicOn ? 'rgba(100,200,255,0.92)' : 'rgba(255,255,255,0.22)'
+  ctx.fillText('♪ MUSIC', GW - 14, 14 + GH * 0.155)
   ctx.restore()
 }
 
@@ -479,6 +649,9 @@ function drawGame(steerAngle) {
 
   // 4. Road + grass + lane markings
   drawRoad(ctx, vpX)
+
+  // 4b. Headlight beams (on top of road surface, under scenery)
+  drawHeadlights(ctx, vpX)
 
   // 5. Scenery objects (sorted back-to-front)
   const sorted = gameState.objects.slice().sort((a, b) => a.t - b.t)
@@ -601,7 +774,7 @@ async function start() {
   const audioWorker = new Worker(new URL('./audio-worker.js', import.meta.url), { type: 'module' })
   audioWorker.onmessage = ({ data }) => {
     if (data.type === 'ready') {
-      setVoiceStatus('Voice ready — say "speed" or "slow"')
+      setVoiceStatus('Voice ready — speed / slow / lights on / lights off / music / stop music')
       startVAD(audioWorker)
     }
     if (data.type === 'progress') {
@@ -609,8 +782,12 @@ async function start() {
     }
     if (data.type === 'result') {
       workerBusy = false
-      if (data.keyword === 'speed')      pendingSpeedTarget = 120
-      else if (data.keyword === 'slow') pendingSpeedTarget = 0
+      if (data.keyword === 'speed')           pendingSpeedTarget = 120
+      else if (data.keyword === 'slow')       pendingSpeedTarget = 0
+      else if (data.keyword === 'lights_on')  gameState.lightsOn = true
+      else if (data.keyword === 'lights_off') gameState.lightsOn = false
+      else if (data.keyword === 'music_on')   startMusic()
+      else if (data.keyword === 'music_off')  stopMusic()
     }
   }
   audioWorker.postMessage({ type: 'load' })
@@ -644,6 +821,7 @@ function stop() {
   videoEl.srcObject = null
   overlayEl.getContext('2d').clearRect(0, 0, overlayEl.width, overlayEl.height)
   smoothedAngle = 0
+  stopMusic()
   startOverlay.style.display = 'flex'
   setStatus('Click Start to begin.')
   btnStart.textContent = 'Start'
