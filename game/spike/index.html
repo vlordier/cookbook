@@ -2,180 +2,59 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>LFM2.5-VL Inference Spike</title>
+  <title>Steering Angle — MediaPipe Hands Spike</title>
   <style>
-    body { font-family: monospace; padding: 24px; max-width: 800px; }
-    h1 { font-size: 18px; margin-bottom: 16px; }
-    .images { display: flex; gap: 24px; margin: 16px 0; }
-    .image-slot { display: flex; flex-direction: column; gap: 8px; }
-    .image-slot label { font-size: 13px; color: #555; }
-    .preview {
-      width: 240px; height: 180px; object-fit: cover;
-      border: 1px solid #ccc; background: #f5f5f5;
-      display: flex; align-items: center; justify-content: center;
-      color: #aaa; font-size: 13px;
+    body { font-family: monospace; padding: 24px; max-width: 900px; background: #111; color: #eee; margin: 0 auto; }
+    h1 { font-size: 16px; margin-bottom: 16px; color: #aaa; }
+    .layout { display: flex; gap: 32px; align-items: flex-start; }
+    .video-wrap {
+      position: relative;
+      width: 480px;
+      height: 360px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      flex-shrink: 0;
     }
-    .preview img { width: 100%; height: 100%; object-fit: cover; display: none; }
-    .controls { display: flex; gap: 12px; margin: 16px 0; }
+    .video-wrap video,
+    .video-wrap canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+    }
+    .sidebar { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+    canvas#wheel { border: 1px solid #333; background: #1a1a1a; }
+    .angle { font-size: 40px; font-weight: bold; color: #fff; min-height: 48px; text-align: center; }
+    .controls { display: flex; gap: 10px; margin: 16px 0; }
     button {
-      padding: 8px 18px; font-size: 14px; cursor: pointer;
-      border: 1px solid #333; background: #fff;
+      padding: 7px 18px; font-size: 13px; font-family: monospace;
+      cursor: pointer; border: 1px solid #888; background: #222; color: #eee;
     }
-    button:disabled { opacity: 0.4; cursor: default; }
-    button.primary { background: #000; color: #fff; border-color: #000; }
-    #log {
-      white-space: pre-wrap; border: 1px solid #ddd; padding: 12px;
-      height: 280px; overflow-y: auto; font-size: 13px; background: #fafafa;
-    }
-    .result { font-size: 32px; font-weight: bold; margin: 12px 0; min-height: 40px; }
+    button:disabled { opacity: 0.35; cursor: default; }
+    #status { font-size: 12px; color: #888; min-height: 18px; }
   </style>
 </head>
 <body>
-  <h1>LFM2.5-VL-1.6B Inference Spike</h1>
+  <h1>MediaPipe Hands — Steering Angle Spike</h1>
 
-  <div class="images">
-    <div class="image-slot">
-      <label>Frame 1 (prev)</label>
-      <div class="preview" id="preview1">
-        <span>no image</span>
-        <img id="img1" alt="frame 1" />
+  <div class="layout">
+    <div>
+      <div class="video-wrap">
+        <video id="video" autoplay muted playsinline></video>
+        <canvas id="overlay"></canvas>
       </div>
-      <input type="file" id="file1" accept="image/*" />
+      <div class="controls">
+        <button id="btnStart">Start Webcam</button>
+      </div>
+      <div id="status">Click "Start Webcam" to begin.</div>
     </div>
-    <div class="image-slot">
-      <label>Frame 2 (curr)</label>
-      <div class="preview" id="preview2">
-        <span>no image</span>
-        <img id="img2" alt="frame 2" />
-      </div>
-      <input type="file" id="file2" accept="image/*" />
+
+    <div class="sidebar">
+      <label style="font-size:12px;color:#888;">Steering angle</label>
+      <canvas id="wheel" width="160" height="160"></canvas>
+      <div class="angle" id="angle"></div>
     </div>
   </div>
 
-  <div class="controls">
-    <button id="btnLoad" class="primary">Load Model</button>
-    <button id="btnRun" disabled>Run Inference</button>
-  </div>
-
-  <div class="result" id="result"></div>
-  <div id="log">Ready. Click "Load Model" to begin.\n</div>
-
-  <script type="module">
-    import { pipeline } from 'https://esm.sh/@huggingface/transformers@4.0.0-next.3'
-
-    const MODEL_ID = 'LiquidAI/LFM2.5-VL-1.6B-ONNX'
-
-    const logEl = document.getElementById('log')
-    const resultEl = document.getElementById('result')
-    let pipe = null
-
-    function log(msg) {
-      logEl.textContent += msg + '\n'
-      logEl.scrollTop = logEl.scrollHeight
-    }
-
-    function loadImage(fileInputId, imgId, previewId) {
-      document.getElementById(fileInputId).addEventListener('change', (e) => {
-        const file = e.target.files[0]
-        if (!file) return
-        const url = URL.createObjectURL(file)
-        const img = document.getElementById(imgId)
-        img.src = url
-        img.style.display = 'block'
-        document.querySelector(`#${previewId} span`).style.display = 'none'
-      })
-    }
-
-    loadImage('file1', 'img1', 'preview1')
-    loadImage('file2', 'img2', 'preview2')
-
-    document.getElementById('btnLoad').addEventListener('click', async () => {
-      document.getElementById('btnLoad').disabled = true
-      log('Checking WebGPU support...')
-
-      if (!navigator.gpu) {
-        log('ERROR: WebGPU is not available. Use Chrome 113+ or Edge 113+.')
-        document.getElementById('btnLoad').disabled = false
-        return
-      }
-
-      log(`Loading ${MODEL_ID} (q4, webgpu)...`)
-      log('First load will download ~500MB. This may take a while.\n')
-      const t0 = performance.now()
-
-      try {
-        pipe = await pipeline('image-text-to-text', MODEL_ID, {
-          dtype: 'q4',
-          device: 'webgpu',
-          progress_callback: (p) => {
-            if (p.status === 'progress' && p.file?.endsWith('.onnx_data')) {
-              log(`Downloading ${p.file}: ${Math.round(p.progress)}%`)
-            }
-            if (p.status === 'ready') {
-              log(`File ready: ${p.file}`)
-            }
-          },
-        })
-        const elapsed = ((performance.now() - t0) / 1000).toFixed(1)
-        log(`\nModel ready in ${elapsed}s`)
-        document.getElementById('btnRun').disabled = false
-      } catch (err) {
-        log(`ERROR loading model: ${err.message}`)
-        document.getElementById('btnLoad').disabled = false
-      }
-    })
-
-    document.getElementById('btnRun').addEventListener('click', async () => {
-      const img1 = document.getElementById('img1')
-      const img2 = document.getElementById('img2')
-
-      if (!img1.src || img1.style.display === 'none') {
-        log('Please load Frame 1 first.')
-        return
-      }
-      if (!img2.src || img2.style.display === 'none') {
-        log('Please load Frame 2 first.')
-        return
-      }
-
-      document.getElementById('btnRun').disabled = true
-      resultEl.textContent = '...'
-      log('\nRunning inference...')
-      const t0 = performance.now()
-
-      const messages = [{
-        role: 'user',
-        content: [
-          { type: 'image', image: img1.src },
-          { type: 'image', image: img2.src },
-          {
-            type: 'text',
-            text: 'Two consecutive images show a person holding an imaginary steering wheel. Classify the hand motion as exactly one word: LEFT, RIGHT, or STRAIGHT.',
-          },
-        ],
-      }]
-
-      try {
-        const output = await pipe(messages, { max_new_tokens: 1, do_sample: false })
-        const elapsed = ((performance.now() - t0) / 1000).toFixed(2)
-
-        log(`Raw output: ${JSON.stringify(output)}`)
-        log(`Latency: ${elapsed}s`)
-
-        const token = (output[0]?.generated_text ?? '').trim().toUpperCase()
-        const direction =
-          token.includes('LEFT') ? 'LEFT' :
-          token.includes('RIGHT') ? 'RIGHT' : 'STRAIGHT'
-
-        resultEl.textContent = direction
-        log(`Direction: ${direction}`)
-      } catch (err) {
-        log(`ERROR during inference: ${err.message}`)
-        console.error(err)
-      }
-
-      document.getElementById('btnRun').disabled = false
-    })
-  </script>
+  <script type="module" src="/main.js"></script>
 </body>
 </html>

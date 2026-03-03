@@ -1,0 +1,17 @@
+{
+  "name": "lfm-vl-spike",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.7.1",
+    "@mediapipe/tasks-vision": "^0.10.14",
+    "onnxruntime-web": "^1.23.2"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
+}
