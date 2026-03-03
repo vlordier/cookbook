@@ -80,7 +80,7 @@ const gameState = {
 function respawnObject(obj, i) {
   const fresh = makeObject(i)
   Object.assign(obj, fresh)
-  obj.t    = Math.random() * 0.12       // spawn near horizon
+  obj.t    = Math.random() * 0.12
   obj.side = Math.random() < 0.5 ? 'left' : 'right'
 }
 
@@ -297,8 +297,8 @@ function drawCarInterior(ctx, steerAngle) {
 
 function drawSteeringWheel(ctx, W, H, dashY, dashH, steerAngle) {
   const cx = W / 2
-  const cy = dashY + dashH * 0.44   // center in upper half of dashboard
-  const R  = dashH * 0.50           // radius — partially clipped by screen bottom
+  const cy = dashY + dashH * 0.44
+  const R  = dashH * 0.50
 
   ctx.save()
   ctx.translate(cx, cy)
@@ -334,20 +334,18 @@ function drawSteeringWheel(ctx, W, H, dashY, dashH, steerAngle) {
   // Three spokes at 90°, 210°, 330°
   ctx.lineCap = 'round'
   for (const aDeg of [90, 210, 330]) {
-    const a = aDeg * Math.PI / 180
+    const a  = aDeg * Math.PI / 180
     const sx = Math.cos(a)
-    const sy2 = Math.sin(a)
-    // Spoke body
+    const sy = Math.sin(a)
     ctx.beginPath()
-    ctx.moveTo(sx * R * 0.14, sy2 * R * 0.14)
-    ctx.lineTo(sx * R * 0.82, sy2 * R * 0.82)
+    ctx.moveTo(sx * R * 0.14, sy * R * 0.14)
+    ctx.lineTo(sx * R * 0.82, sy * R * 0.82)
     ctx.strokeStyle = '#252525'
     ctx.lineWidth   = R * 0.13
     ctx.stroke()
-    // Spoke highlight
     ctx.beginPath()
-    ctx.moveTo(sx * R * 0.14, sy2 * R * 0.14)
-    ctx.lineTo(sx * R * 0.82, sy2 * R * 0.82)
+    ctx.moveTo(sx * R * 0.14, sy * R * 0.14)
+    ctx.lineTo(sx * R * 0.82, sy * R * 0.82)
     ctx.strokeStyle = 'rgba(65,65,65,0.7)'
     ctx.lineWidth   = R * 0.06
     ctx.stroke()
@@ -359,7 +357,6 @@ function drawSteeringWheel(ctx, W, H, dashY, dashH, steerAngle) {
   ctx.fillStyle = '#222'; ctx.fill()
   ctx.beginPath(); ctx.arc(0, 0, R * 0.12, 0, Math.PI * 2)
   ctx.fillStyle = '#333'; ctx.fill()
-  // Hub dot (brand color)
   ctx.beginPath(); ctx.arc(0, 0, R * 0.042, 0, Math.PI * 2)
   ctx.fillStyle = 'rgba(0,180,255,0.85)'; ctx.fill()
 
@@ -390,7 +387,7 @@ function drawRoad(ctx, vpX) {
   ctx.fillStyle = roadGrad
   ctx.fill()
 
-  // Road shoulder strips (slightly darker asphalt beyond edge lines)
+  // Road shoulder strips
   for (const sign of [-1, 1]) {
     ctx.beginPath()
     ctx.moveTo(vpX + sign * ROAD_HW_TOP, HORIZON_Y)
@@ -425,8 +422,8 @@ function drawRoad(ctx, vpX) {
     // Edge lines (white)
     const ew = Math.max(1, hw * 0.028)
     ctx.fillStyle = 'rgba(255,255,255,0.72)'
-    ctx.fillRect(cx - hw,        y0, ew, segH)
-    ctx.fillRect(cx + hw - ew,   y0, ew, segH)
+    ctx.fillRect(cx - hw,      y0, ew, segH)
+    ctx.fillRect(cx + hw - ew, y0, ew, segH)
   }
 }
 
@@ -466,9 +463,9 @@ function drawGame(steerAngle) {
 
   // 3. Horizon glow (orange sunset strip)
   const glowGrad = ctx.createLinearGradient(0, HORIZON_Y - 32, 0, HORIZON_Y + 14)
-  glowGrad.addColorStop(0,   'rgba(255,130,20,0)')
-  glowGrad.addColorStop(0.65,'rgba(255,90,10,0.28)')
-  glowGrad.addColorStop(1,   'rgba(200,50,0,0.12)')
+  glowGrad.addColorStop(0,    'rgba(255,130,20,0)')
+  glowGrad.addColorStop(0.65, 'rgba(255,90,10,0.28)')
+  glowGrad.addColorStop(1,    'rgba(200,50,0,0.12)')
   ctx.fillStyle = glowGrad
   ctx.fillRect(0, HORIZON_Y - 32, GW, 46)
 
@@ -528,11 +525,9 @@ function loop() {
   if (results.landmarks.length === 2) {
     for (const hand of results.landmarks) drawHandSkeleton(ctx, hand, W, H)
 
-    // Sort by x so index-0 = left side of frame, index-1 = right
     const [left, right] = results.landmarks.slice().sort((a, b) => a[0].x - b[0].x)
     const lw = left[0], rw = right[0]
 
-    // Draw steering axis in PiP
     ctx.beginPath()
     ctx.moveTo(lw.x * W, lw.y * H)
     ctx.lineTo(rw.x * W, rw.y * H)
@@ -545,7 +540,7 @@ function loop() {
     smoothedAngle = EMA_ALPHA * clamped + (1 - EMA_ALPHA) * smoothedAngle
     setStatus('Hands detected — steering active')
   } else {
-    smoothedAngle *= (1 - EMA_ALPHA)   // drift back to center
+    smoothedAngle *= (1 - EMA_ALPHA)
     setStatus(results.landmarks.length === 0 ? 'Show both hands to steer' : 'Show both hands')
   }
 
@@ -599,4 +594,4 @@ function stop() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 btnStart.onclick = start
-drawGame(0)   // render one static frame so the canvas isn't blank
+drawGame(0)
