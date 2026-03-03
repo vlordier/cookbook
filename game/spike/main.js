@@ -22,9 +22,11 @@ const statusEl     = document.getElementById('status')
 const btnStart     = document.getElementById('btnStart')
 const startOverlay = document.getElementById('startOverlay')
 
-let handLandmarker = null
-let animFrameId    = null
-let smoothedAngle  = 0
+let handLandmarker    = null
+let animFrameId       = null
+let smoothedAngle     = 0
+let lastDetectionTime = 0
+const DETECTION_INTERVAL_MS = 33   // ~30 fps for hand detection
 
 function setStatus(msg) { statusEl.textContent = msg }
 
@@ -73,7 +75,7 @@ function makeObject(i) {
 const N_OBJECTS = 30
 const gameState = {
   roadOffset: 0,
-  speed:      0.018,
+  speed:      0.010,
   objects:    Array.from({ length: N_OBJECTS }, (_, i) => makeObject(i)),
 }
 
@@ -430,7 +432,7 @@ function drawRoad(ctx, vpX) {
 // ── HUD ──────────────────────────────────────────────────────────────────────
 
 function drawHUD(ctx, steerAngle) {
-  const speedKmh = 180 + (Math.abs(steerAngle) * 0.5) | 0
+  const speedKmh = 100
   ctx.save()
   ctx.textAlign    = 'right'
   ctx.textBaseline = 'top'
@@ -514,13 +516,17 @@ function loop() {
     if (gameState.objects[i].t > 1.0) respawnObject(gameState.objects[i], i)
   }
 
-  // Hand detection
+  // Hand detection — throttled so it doesn't stall the render loop
+  const now = performance.now()
+  if (now - lastDetectionTime >= DETECTION_INTERVAL_MS) {
+    lastDetectionTime = now
+
   const W   = overlayEl.width
   const H   = overlayEl.height
   const ctx = overlayEl.getContext('2d')
   ctx.clearRect(0, 0, W, H)
 
-  const results = handLandmarker.detectForVideo(videoEl, performance.now())
+  const results = handLandmarker.detectForVideo(videoEl, now)
 
   if (results.landmarks.length === 2) {
     for (const hand of results.landmarks) drawHandSkeleton(ctx, hand, W, H)
@@ -543,6 +549,8 @@ function loop() {
     smoothedAngle *= (1 - EMA_ALPHA)
     setStatus(results.landmarks.length === 0 ? 'Show both hands to steer' : 'Show both hands')
   }
+
+  } // end detection throttle
 
   drawGame(smoothedAngle)
 }
