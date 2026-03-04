@@ -107,6 +107,8 @@ uv run mia
 | LFM2.5-1.2B-Thinking Q4_0 | 3/10 | 2.1s | 22K |
 | LFM2-8B-A1B Q4_0 | 0/10 | 6.5s | 32K |
 
+See [`benchmark/results/summary.md`](benchmark/results/summary.md) for per-task breakdowns.
+
 **Run the benchmark:**
 ```bash
 # All tasks
