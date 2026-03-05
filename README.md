@@ -16,6 +16,19 @@
 
 **Examples**, **tutorials**, and **applications** to help you build with our open-weight [LFMs](https://huggingface.co/LiquidAI) and the [LEAP SDK](https://leap.liquid.ai/) on laptops, mobile, and edge devices.
 
+## Contents
+
+- [🤖 Local AI Apps](#-local-ai-apps)
+- [📱 Mobile App Deployment](#-mobile-app-deployment)
+  - [Android](#android)
+  - [iOS](#ios)
+- [🎯 Fine-Tuning Notebooks](#-fine-tuning-notebooks)
+- [🏭 Built with LFM](#-built-with-lfm)
+- [🌟 Community Projects](#-community-projects)
+- [🕐 Technical Deep Dives](#-technical-deep-dives)
+- [Contributing](#contributing)
+- [Support](#support)
+
 ## 🤖 Local AI Apps
 
 Ready-to-run applications showcasing agentic workflows and real-time inference on a local device.
@@ -28,7 +41,9 @@ Ready-to-run applications showcasing agentic workflows and real-time inference o
 | Audio Car Cockpit | Voice-controlled car cockpit demo combining LFM2.5-Audio-1.5B with LFM2-1.2B-Tool | [Code](./examples/audio-car-cockpit/README.md) |
 | Audio WebGPU Demo | Run LFM2.5-Audio-1.5B entirely in your browser for speech recognition, TTS, and conversation | [Code](./examples/audio-webgpu-demo/README.md) |
 | Vision WebGPU Demo | Real-time video captioning with LFM2.5-VL-1.6B running in-browser using WebGPU | [Code](./examples/vl-webgpu-demo/README.md) |
+| Thinking WebGPU Demo | Run LFM2.5-1.2B-Thinking entirely in your browser with WebGPU for on-device chain-of-thought reasoning | [Demo](https://huggingface.co/spaces/LiquidAI/LFM2.5-1.2B-Thinking-WebGPU) |
 | LocalCowork | On-device AI agent for file ops, security scanning, OCR, and more, powered by LFM2-24B-A2B | [Code](./examples/localcowork/README.md) |
+| Hand & Voice Racer | Browser driving game controlled by hand gestures (MediaPipe) and voice commands (LFM2.5-Audio-1.5B), running fully local | [Code](./examples/hand-voice-racer/README.md) |
 
 ## 📱 Mobile App Deployment
 
@@ -73,6 +88,14 @@ Colab notebooks and Python scripts for customizing LFM models with your own data
 | **Vision-Language Models** | | |
 | VLM SFT with Unsloth | Supervised fine-tuning for LFM2-VL models on custom image-text datasets | [Notebook](./finetuning/notebooks/sft_for_vision_language_model.ipynb) |
 
+## 🏭 Built with LFM
+
+Production and open-source applications that support LFM models as an inference backend, among other providers.
+
+| Name | Description | Link |
+|------|-------------|------|
+| DeepCamera | Open-source AI camera system for local vision intelligence with facial recognition, person re-ID, and edge deployment on Jetson and Raspberry Pi | [Code](https://github.com/SharpAI/DeepCamera) |
+
 ## 🌟 Community Projects
 
 Open-source projects built by the community showcasing LFMs with real use cases.
@@ -94,6 +117,9 @@ Open-source projects built by the community showcasing LFMs with real use cases.
 | LFM-2.5 JP on Web | LFM2.5 1.2B parameter Japanese language model running locally in the browser with WebGPU, using Transformers.js and ONNX Runtime on Web | [Code](https://github.com/sitammeur/lfm2.5-jp-web) |
 | LFM-2.5 Thinking on Web | LFM2.5 1.2B parameter reasoning language model running locally in the browser with WebGPU, using Transformers.js and ONNX Runtime Web | [Code](https://github.com/sitammeur/lfm2.5-thinking-web) |
 | LFM2.5 Mobile Actions | LoRA fine-tuned LFM2.5-1.2B that translates natural language into Android OS function calls for on-device mobile action recognition | [Code](https://github.com/Mandark-droid/LFM2.5-1.2B-Instruct-mobile-actions) |
+| SFT + DPO Fine-tuning | Teaching a 1.2B Model to be a Grumpy Italian Chef: SFT + DPO Fine-Tuning with Unsloth | [Code](https://github.com/benitomartin/grumpy-chef-finetuning-dpo) |
+| Tauri Plugin LEAP AI | Tauri plugin to integrate LEAP and Liquid LFMs into desktop and mobile apps built with Tauri | [Crate](https://crates.io/crates/tauri-plugin-leap-ai) |
+| grosme | CLI grocery assistant that reads Apple Notes lists and finds Walmart product matches using LFM-2.5 tool-calling agent via Ollama | [Code](https://github.com/earl562/grosme) |
 
 ## 🕐 Technical Deep Dives
 
@@ -105,6 +131,7 @@ Recorded sessions (~60 minutes) covering advanced topics and hands-on implementa
 | 2025-11-27 | Building a 100% local Audio-to-Speech CLI with LFM2-Audio | [Video](https://www.youtube.com/watch?v=yeu077gPmCA) |
 | 2025-12-26 | Fine-tuning LFM2-350M for browser control with GRPO and OpenEnv | [Video](https://www.youtube.com/watch?v=gKQ08yee3Lw) |
 | 2026-01-22 | Local video-captioning with LFM2.5-VL-1.6B and WebGPU | [Video](https://www.youtube.com/watch?v=xsWARHFoA3E) |
+| 2026-03-05 | Build your own local AI coding assistant with LLM + tools + context engineering | [Register](https://liquid-ai.zoom.us/webinar/register/WN_Vie59kpdSJGCAX6NcgJtyg#/registration) |
 
 Join the next session! Head to the `#live-events` channel on [Discord](https://discord.com/invite/liquid-ai).
 
