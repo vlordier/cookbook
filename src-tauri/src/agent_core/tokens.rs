@@ -132,9 +132,7 @@ pub fn summarize_tool_result(tool_name: &str, result: &serde_json::Value) -> Str
     } else {
         // Summarize to one line
         let preview = truncate_utf8(&result_str, 100);
-        format!(
-            "[{tool_name} returned ~{token_count} tokens: {preview}...]"
-        )
+        format!("[{tool_name} returned ~{token_count} tokens: {preview}...]")
     }
 }
 
@@ -147,17 +145,17 @@ pub fn summarize_turn(role: &Role, content: Option<&str>) -> String {
             let text = content.unwrap_or("[empty]");
             let preview = truncate_utf8(text, 80);
             format!("User: {preview}")
-        }
+        },
         Role::Assistant => {
             let text = content.unwrap_or("[tool calls]");
             let preview = truncate_utf8(text, 80);
             format!("Assistant: {preview}")
-        }
+        },
         Role::Tool => {
             let text = content.unwrap_or("[result]");
             let preview = truncate_utf8(text, 60);
             format!("Tool result: {preview}")
-        }
+        },
         Role::System => "System prompt".to_string(),
     }
 }
@@ -264,7 +262,7 @@ mod tests {
     fn test_truncate_utf8_within_multibyte() {
         // '═' is U+2550, encoded as 3 bytes: 0xE2, 0x95, 0x90
         let text = "═══"; // 9 bytes total
-        // Cutting at byte 4 lands inside the second '═' (bytes 3..6)
+                          // Cutting at byte 4 lands inside the second '═' (bytes 3..6)
         assert_eq!(truncate_utf8(text, 4), "═");
         // Cutting at byte 6 is exactly at a boundary
         assert_eq!(truncate_utf8(text, 6), "══");
@@ -287,5 +285,65 @@ mod tests {
         // This must NOT panic
         let summary = summarize_tool_result("audit.generate_audit_report", &result);
         assert!(summary.contains("audit.generate_audit_report"));
+    }
+}
+
+#[cfg(test)]
+mod proptest_tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn test_estimate_tokens_never_negative(s in "\\PC*") {
+            let tokens = estimate_tokens(&s);
+            prop_assert!(tokens >= 0);
+        }
+
+        #[test]
+        fn test_estimate_tokens_grows_with_input(s in "\\PC*") {
+            let tokens_short = estimate_tokens(&s);
+            let longer = format!("{} extra", s);
+            let tokens_longer = estimate_tokens(&longer);
+            prop_assert!(tokens_longer > tokens_short);
+        }
+
+        #[test]
+        fn test_truncate_utf8_preserves_valid_utf8(s in "\\PC*", max_bytes in 0..1000usize) {
+            let truncated = truncate_utf8(&s, max_bytes);
+            // Must be valid UTF-8
+            std::str::from_utf8(truncated.as_bytes()).unwrap();
+        }
+
+        #[test]
+        fn test_truncate_utf8_respects_max_bytes(s in "\\PC*", max_bytes in 0..1000usize) {
+            let truncated = truncate_utf8(&s, max_bytes);
+            prop_assert!(truncated.len() <= max_bytes);
+        }
+
+        #[test]
+        fn test_estimate_json_tokens_never_negative(s in "\\PC*") {
+            let tokens = estimate_json_tokens(&s);
+            prop_assert!(tokens >= 0);
+        }
+    }
+
+    #[cfg(test)]
+    mod quickcheck_tests {
+        use super::*;
+
+        quickcheck::quickcheck! {
+            fn test_truncate_utf8_never_panics(s: String, max_bytes: usize) -> bool {
+                std::panic::catch_unwind(|| truncate_utf8(&s, max_bytes)).is_ok()
+            }
+
+            fn test_estimate_tokens_never_panics(s: String) -> bool {
+                std::panic::catch_unwind(|| estimate_tokens(&s)).is_ok()
+            }
+
+            fn test_estimate_json_tokens_never_panics(s: String) -> bool {
+                std::panic::catch_unwind(|| estimate_json_tokens(&s)).is_ok()
+            }
+        }
     }
 }
