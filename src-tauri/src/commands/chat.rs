@@ -3533,4 +3533,140 @@ mod tests {
             "https://example.com/Documents/file"
         );
     }
+
+    // ─── Tool Result Compression Tests (PR #59) ─────────────────────────────
+
+    #[test]
+    fn test_truncate_tool_result_small() {
+        let result = "short result";
+        let truncated = truncate_tool_result(result, "test_tool");
+        assert_eq!(truncated, result);
+    }
+
+    #[test]
+    fn test_truncate_tool_result_large_no_compression() {
+        // Large result that doesn't match compression patterns
+        let result = "x".repeat(10000);
+        let truncated = truncate_tool_result(&result, "unknown_tool");
+        assert!(truncated.contains("truncated"));
+        assert!(truncated.len() < result.len());
+    }
+
+    #[test]
+    fn test_compress_directory_listing() {
+        let listing = r#"📁 src/
+📁 tests/
+📄 file1.txt (1 KB)
+📄 file2.txt (2 KB)
+📁 subdir/
+📄 long_file_name.txt (100 KB)"#;
+        let compressed = compress_directory_listing(listing);
+        assert!(compressed.is_some());
+        let summary = compressed.unwrap();
+        assert!(summary.contains("Total:"));
+        assert!(summary.contains("Directories:"));
+        assert!(summary.contains("Files:"));
+    }
+
+    #[test]
+    fn test_compress_directory_listing_empty() {
+        let compressed = compress_directory_listing("");
+        assert!(compressed.is_none());
+    }
+
+    #[test]
+    fn test_compress_search_results_with_count() {
+        let result = "Scanning files...\nFound 42 matches\n\n/path/to/file1.txt: line 10\n/path/to/file2.txt: line 20";
+        let compressed = compress_search_results(result);
+        assert!(compressed.is_some());
+        let summary = compressed.unwrap();
+        assert!(summary.contains("42"));
+        assert!(summary.contains("Key findings"));
+    }
+
+    #[test]
+    fn test_compress_search_results_no_count() {
+        // Search result without clear count pattern
+        let result = "File A\nFile B\nFile C\nFile D\nFile E";
+        let compressed = compress_search_results(result);
+        assert!(compressed.is_some());
+    }
+
+    #[test]
+    fn test_compress_json_result_array() {
+        let json = r#"[
+            {"name": "item1", "size": 100},
+            {"name": "item2", "size": 200},
+            {"name": "item3", "size": 300}
+        ]"#;
+        let compressed = compress_json_result(json);
+        assert!(compressed.is_some());
+        let summary = compressed.unwrap();
+        assert!(summary.contains("3 items"));
+        assert!(summary.contains("item1"));
+    }
+
+    #[test]
+    fn test_compress_json_result_object() {
+        let json = r#"{"name": "test", "content": "hello world", "count": 42}"#;
+        let compressed = compress_json_result(json);
+        assert!(compressed.is_some());
+        let summary = compressed.unwrap();
+        assert!(summary.contains("name:"));
+        assert!(summary.contains("test"));
+    }
+
+    #[test]
+    fn test_compress_json_result_empty_array() {
+        let json = "[]";
+        let compressed = compress_json_result(json);
+        assert!(compressed.is_some());
+        assert!(compressed.unwrap().contains("empty"));
+    }
+
+    #[test]
+    fn test_compress_tool_result_skips_small() {
+        // Small results should not be compressed
+        let result = "short";
+        let compressed = compress_tool_result(result, "list_dir");
+        assert!(compressed.is_none());
+    }
+
+    #[test]
+    fn test_compress_tool_result_non_compressible_tool() {
+        // Non-compressible tools should return None even for large results
+        let result = "x".repeat(10000);
+        let compressed = compress_tool_result(&result, "write_file");
+        assert!(compressed.is_none());
+    }
+
+    #[test]
+    fn test_compress_tool_result_compressible_tool() {
+        // Compressible tools should attempt compression (need 3000+ chars)
+        let result = "📁 folder1\n📁 folder2\n📄 file1.txt (1 KB)\n📄 file2.txt (2 KB)\n".repeat(500);
+        let compressed = compress_tool_result(&result, "list_dir");
+        assert!(compressed.is_some());
+    }
+
+    #[test]
+    fn test_builtin_tool_definitions() {
+        let tools = builtin_tool_definitions();
+        assert!(!tools.is_empty());
+        
+        let names: Vec<String> = tools.iter()
+            .map(|t| t.function.name.clone())
+            .collect();
+        
+        assert!(names.contains(&"list_directory".to_string()));
+        assert!(names.contains(&"read_file".to_string()));
+    }
+
+    #[test]
+    fn test_builtin_tool_definitions_have_descriptions() {
+        let tools = builtin_tool_definitions();
+        for tool in &tools {
+            assert!(!tool.function.description.is_empty());
+            assert!(!tool.function.parameters.is_null());
+        }
+    }
 }

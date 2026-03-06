@@ -501,3 +501,226 @@ pub fn check_config_reload() -> Result<bool, String> {
 pub fn reload_model_config() -> Result<ModelsOverviewInfo, String> {
     get_models_config()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::Ordering;
+
+    #[test]
+    fn test_sampling_config_default() {
+        let cfg = SamplingConfig::default();
+        assert_eq!(cfg.tool_temperature, 0.1);
+        assert_eq!(cfg.tool_top_p, 0.2);
+        assert_eq!(cfg.conversational_temperature, 0.7);
+        assert_eq!(cfg.conversational_top_p, 0.9);
+    }
+
+    #[test]
+    fn test_sampling_config_serialization() {
+        let cfg = SamplingConfig {
+            tool_temperature: 0.5,
+            tool_top_p: 0.3,
+            conversational_temperature: 0.8,
+            conversational_top_p: 0.95,
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        assert!(json.contains("0.5"));
+        assert!(json.contains("0.3"));
+        assert!(json.contains("0.8"));
+        assert!(json.contains("0.95"));
+    }
+
+    #[test]
+    fn test_sampling_config_deserialization() {
+        let json = r#"{
+            "toolTemperature": 0.3,
+            "toolTopP": 0.4,
+            "conversationalTemperature": 0.6,
+            "conversationalTopP": 0.8
+        }"#;
+        let cfg: SamplingConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(cfg.tool_temperature, 0.3);
+        assert_eq!(cfg.tool_top_p, 0.4);
+        assert_eq!(cfg.conversational_temperature, 0.6);
+        assert_eq!(cfg.conversational_top_p, 0.8);
+    }
+
+    #[test]
+    fn test_app_settings_default() {
+        let settings = AppSettings::default();
+        assert_eq!(settings.active_model_key, None);
+        assert!(settings.allowed_paths.is_empty());
+        assert_eq!(settings.theme, "system");
+        assert!(settings.show_tool_traces);
+        // Sampling should be default
+        assert_eq!(settings.sampling.tool_temperature, 0.1);
+    }
+
+    #[test]
+    fn test_app_settings_serialization() {
+        let mut settings = AppSettings::default();
+        settings.active_model_key = Some("test-model".to_string());
+        settings.allowed_paths = vec!["/home/user/docs".to_string()];
+        settings.theme = "dark".to_string();
+        settings.show_tool_traces = false;
+
+        let json = serde_json::to_string(&settings).unwrap();
+        assert!(json.contains("test-model"));
+        assert!(json.contains("dark"));
+        assert!(json.contains("docs"));
+    }
+
+    #[test]
+    fn test_app_settings_deserialization() {
+        let json = r#"{
+            "activeModelKey": "lm-studio-model",
+            "allowedPaths": ["/tmp", "/var"],
+            "theme": "light",
+            "showToolTraces": false,
+            "sampling": {
+                "toolTemperature": 0.2,
+                "toolTopP": 0.3,
+                "conversationalTemperature": 0.8,
+                "conversationalTopP": 0.9
+            }
+        }"#;
+        let settings: AppSettings = serde_json::from_str(json).unwrap();
+        assert_eq!(settings.active_model_key, Some("lm-studio-model".to_string()));
+        assert_eq!(settings.allowed_paths.len(), 2);
+        assert_eq!(settings.theme, "light");
+        assert!(!settings.show_tool_traces);
+    }
+
+    #[test]
+    fn test_config_last_modified_atomic() {
+        // Test that CONFIG_LAST_MODIFIED is properly initialized
+        let initial = CONFIG_LAST_MODIFIED.load(Ordering::SeqCst);
+        assert_eq!(initial, 0);
+
+        // Store a value and verify
+        CONFIG_LAST_MODIFIED.store(12345, Ordering::SeqCst);
+        let after = CONFIG_LAST_MODIFIED.load(Ordering::SeqCst);
+        assert_eq!(after, 12345);
+
+        // Reset
+        CONFIG_LAST_MODIFIED.store(0, Ordering::SeqCst);
+    }
+
+    #[test]
+    fn test_settings_changed_atomic() {
+        // Test the SETTINGS_CHANGED flag
+        settings_changed();
+        assert!(has_settings_changed());
+        assert!(!has_settings_changed()); // Should clear after check
+
+        // Setting it again should work
+        settings_changed();
+        assert!(has_settings_changed());
+    }
+
+    #[test]
+    fn test_model_config_info_fields() {
+        let info = ModelConfigInfo {
+            key: "test-key".to_string(),
+            display_name: "Test Model".to_string(),
+            runtime: "lm-studio".to_string(),
+            base_url: "http://localhost:1234/v1".to_string(),
+            context_window: 32768,
+            temperature: 0.7,
+            max_tokens: 4096,
+            estimated_vram_gb: Some(24.0),
+            capabilities: vec!["chat".to_string(), "tools".to_string()],
+            tool_call_format: "json".to_string(),
+        };
+
+        assert_eq!(info.key, "test-key");
+        assert_eq!(info.runtime, "lm-studio");
+        assert_eq!(info.context_window, 32768);
+    }
+
+    #[test]
+    fn test_models_overview_info_serialization() {
+        let overview = ModelsOverviewInfo {
+            active_model: "qwen2.5".to_string(),
+            models: vec![
+                ModelConfigInfo {
+                    key: "qwen2.5".to_string(),
+                    display_name: "Qwen 2.5".to_string(),
+                    runtime: "ollama".to_string(),
+                    base_url: "http://localhost:11434/v1".to_string(),
+                    context_window: 32768,
+                    temperature: 0.7,
+                    max_tokens: 4096,
+                    estimated_vram_gb: Some(20.0),
+                    capabilities: vec!["chat".to_string()],
+                    tool_call_format: "json".to_string(),
+                }
+            ],
+            fallback_chain: vec!["gpt-oss".to_string()],
+        };
+
+        let json = serde_json::to_string(&overview).unwrap();
+        assert!(json.contains("qwen2.5"));
+        assert!(json.contains("ollama"));
+    }
+
+    #[test]
+    fn test_mcp_server_status_info() {
+        let status = McpServerStatusInfo {
+            name: "filesystem".to_string(),
+            status: "initialized".to_string(),
+            tool_count: 10,
+            tool_names: vec!["list_dir".to_string(), "read_file".to_string()],
+            last_check: "2024-01-01T00:00:00Z".to_string(),
+            error: None,
+        };
+
+        assert_eq!(status.name, "filesystem");
+        assert_eq!(status.status, "initialized");
+        assert_eq!(status.tool_count, 10);
+
+        // Test with error
+        let status_with_error = McpServerStatusInfo {
+            error: Some("Connection refused".to_string()),
+            ..status
+        };
+        assert!(status_with_error.error.is_some());
+    }
+
+    #[test]
+    fn test_permission_grant_info() {
+        let grant = PermissionGrantInfo {
+            tool_name: "filesystem.write_file".to_string(),
+            scope: "session".to_string(),
+            granted_at: "2024-01-01T12:00:00Z".to_string(),
+        };
+
+        assert_eq!(grant.tool_name, "filesystem.write_file");
+        assert_eq!(grant.scope, "session");
+    }
+
+    #[test]
+    fn test_app_settings_export_import_roundtrip() {
+        let original = AppSettings {
+            active_model_key: Some("test-model".to_string()),
+            allowed_paths: vec!["/home/user".to_string()],
+            theme: "dark".to_string(),
+            show_tool_traces: true,
+            sampling: SamplingConfig {
+                tool_temperature: 0.15,
+                tool_top_p: 0.25,
+                conversational_temperature: 0.75,
+                conversational_top_p: 0.85,
+            },
+        };
+
+        let json = original.export_to_json().unwrap();
+        let imported = AppSettings::import_from_json(&json).unwrap();
+
+        assert_eq!(imported.active_model_key, original.active_model_key);
+        assert_eq!(imported.allowed_paths, original.allowed_paths);
+        assert_eq!(imported.theme, original.theme);
+        assert_eq!(imported.sampling.tool_temperature, original.sampling.tool_temperature);
+    }
+}
