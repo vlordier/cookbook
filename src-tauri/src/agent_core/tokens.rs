@@ -289,6 +289,7 @@ mod tests {
 }
 
 #[cfg(test)]
+/// Property-based tests using proptest for systematic input generation.
 mod proptest_tests {
     use super::*;
     use proptest::prelude::*;
@@ -329,6 +330,7 @@ mod proptest_tests {
     }
 
     #[cfg(test)]
+    /// Quickcheck fuzz tests to ensure functions never panic on arbitrary input.
     mod quickcheck_tests {
         use super::*;
 
