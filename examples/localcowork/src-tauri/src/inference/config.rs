@@ -382,9 +382,9 @@ mod tests {
               lmstudio:
                 health_check: "http://localhost:1234/v1/models"
                 startup_timeout_seconds: 30
-            ollama:
-              command: "ollama serve"
-              health_check: "http://localhost:11434/api/tags"
+              ollama:
+                command: "ollama serve"
+                health_check: "http://localhost:11434/api/tags"
             models:
               test:
                 display_name: "Test"
