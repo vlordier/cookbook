@@ -6,7 +6,7 @@ pub mod mcp_client;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use agent_core::{AgentDatabase, ConversationManager, ConfirmationResponse, PermissionStore};
+use agent_core::{AgentDatabase, ConfirmationResponse, ConversationManager, PermissionStore};
 use commands::settings::SamplingConfig;
 use mcp_client::McpClient;
 use tauri::Manager;
@@ -39,6 +39,7 @@ pub(crate) fn data_dir() -> std::path::PathBuf {
 }
 
 /// Returns the cache directory for the app (embedding indexes, etc.).
+#[allow(dead_code)]
 pub(crate) fn cache_dir() -> std::path::PathBuf {
     data_dir().join("cache")
 }
@@ -134,18 +135,20 @@ impl FlushingWriter {
 
 impl std::io::Write for FlushingWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let mut f = self.file.lock().map_err(|e| {
-            std::io::Error::other(format!("lock poisoned: {e}"))
-        })?;
+        let mut f = self
+            .file
+            .lock()
+            .map_err(|e| std::io::Error::other(format!("lock poisoned: {e}")))?;
         let n = std::io::Write::write(&mut *f, buf)?;
         std::io::Write::flush(&mut *f)?;
         Ok(n)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        let mut f = self.file.lock().map_err(|e| {
-            std::io::Error::other(format!("lock poisoned: {e}"))
-        })?;
+        let mut f = self
+            .file
+            .lock()
+            .map_err(|e| std::io::Error::other(format!("lock poisoned: {e}")))?;
         std::io::Write::flush(&mut *f)
     }
 }
@@ -361,14 +364,14 @@ fn load_override_file(
                         "loaded MCP override config"
                     );
                     return cfg.servers;
-                }
+                },
                 Err(e) => {
                     tracing::warn!(
                         path = %path.display(),
                         error = %e,
                         "failed to parse MCP override config"
                     );
-                }
+                },
             }
         }
     }
@@ -554,8 +557,10 @@ pub fn run() {
         .manage(TokioMutex::new(McpClient::new(empty_mcp_config, None)))
         .manage(TokioMutex::new(PermissionStore::new()))
         .manage(TokioMutex::new(SamplingConfig::load_or_default()))
-        .manage(TokioMutex::new(None::<tokio::sync::oneshot::Sender<ConfirmationResponse>>)
-            as PendingConfirmation)
+        .manage(
+            TokioMutex::new(None::<tokio::sync::oneshot::Sender<ConfirmationResponse>>)
+                as PendingConfirmation,
+        )
         .manage(TokioMutex::new(HashMap::<String, bool>::new()) as InFlightRequests)
         .setup(|app| {
             // Initialize MCP client asynchronously during app setup.
@@ -581,7 +586,6 @@ pub fn run() {
 
                 // Filter tools by enabled_tools allowlist (if configured)
                 filter_tools_by_allowlist(&mut mcp_client, &project_root);
-
 
                 let running = mcp_client.running_server_count();
                 let tools = mcp_client.tool_count();
@@ -668,17 +672,17 @@ mod tests {
     fn test_rotate_log_file_creates_rotated_copies() {
         let temp_dir = TempDir::new().unwrap();
         let log_path = temp_dir.path().join("test.log");
-        
+
         // Create original file
         std::fs::write(&log_path, "original content").unwrap();
-        
+
         // Rotate
         rotate_log_file(&log_path, 3);
-        
+
         // Original should be moved to .1
         let rotated = log_path.with_extension("log.1");
         assert!(rotated.exists());
-        
+
         let content = std::fs::read_to_string(&rotated).unwrap();
         assert_eq!(content, "original content");
     }
@@ -687,7 +691,7 @@ mod tests {
     fn test_rotate_log_file_handles_missing_file() {
         let temp_dir = TempDir::new().unwrap();
         let log_path = temp_dir.path().join("nonexistent.log");
-        
+
         // Should not panic
         rotate_log_file(&log_path, 3);
     }
@@ -696,22 +700,22 @@ mod tests {
     fn test_rotate_log_file_multiple_rotations() {
         let temp_dir = TempDir::new().unwrap();
         let log_path = temp_dir.path().join("test.log");
-        
+
         // Create and rotate multiple times
         std::fs::write(&log_path, "v1").unwrap();
         rotate_log_file(&log_path, 3);
-        
+
         std::fs::write(&log_path, "v2").unwrap();
         rotate_log_file(&log_path, 3);
-        
+
         std::fs::write(&log_path, "v3").unwrap();
         rotate_log_file(&log_path, 3);
-        
+
         // Check all versions exist
         assert!(log_path.with_extension("log.1").exists());
         assert!(log_path.with_extension("log.2").exists());
         assert!(log_path.with_extension("log.3").exists());
-        
+
         // Oldest should be v1
         let v1 = std::fs::read_to_string(log_path.with_extension("log.3")).unwrap();
         assert_eq!(v1, "v1");
@@ -734,7 +738,7 @@ mod tests {
     fn test_filter_by_enabled_servers_filters_correctly() {
         let temp_dir = TempDir::new().unwrap();
         let project_root = temp_dir.path();
-        
+
         // Create config with enabled_servers
         let config_content = r#"
 enabled_servers:
@@ -742,42 +746,54 @@ enabled_servers:
   - task
 "#;
         std::fs::write(project_root.join("_models/config.yaml"), config_content).unwrap();
-        
+
         // Create servers
         let mut servers = HashMap::new();
-        servers.insert("filesystem".to_string(), ServerConfig {
-            command: "node".to_string(),
-            args: vec![],
-            env: HashMap::new(),
-            cwd: None,
-            venv: None,
-        });
-        servers.insert("task".to_string(), ServerConfig {
-            command: "node".to_string(),
-            args: vec![],
-            env: HashMap::new(),
-            cwd: None,
-            venv: None,
-        });
-        servers.insert("calendar".to_string(), ServerConfig {
-            command: "node".to_string(),
-            args: vec![],
-            env: HashMap::new(),
-            cwd: None,
-            venv: None,
-        }); // Should be removed
-        servers.insert("email".to_string(), ServerConfig {
-            command: "node".to_string(),
-            args: vec![],
-            env: HashMap::new(),
-            cwd: None,
-            venv: None,
-        }); // Should be removed
-        
+        servers.insert(
+            "filesystem".to_string(),
+            ServerConfig {
+                command: "node".to_string(),
+                args: vec![],
+                env: HashMap::new(),
+                cwd: None,
+                venv: None,
+            },
+        );
+        servers.insert(
+            "task".to_string(),
+            ServerConfig {
+                command: "node".to_string(),
+                args: vec![],
+                env: HashMap::new(),
+                cwd: None,
+                venv: None,
+            },
+        );
+        servers.insert(
+            "calendar".to_string(),
+            ServerConfig {
+                command: "node".to_string(),
+                args: vec![],
+                env: HashMap::new(),
+                cwd: None,
+                venv: None,
+            },
+        ); // Should be removed
+        servers.insert(
+            "email".to_string(),
+            ServerConfig {
+                command: "node".to_string(),
+                args: vec![],
+                env: HashMap::new(),
+                cwd: None,
+                venv: None,
+            },
+        ); // Should be removed
+
         let before = servers.len();
         filter_by_enabled_servers(&mut servers, project_root);
         let after = servers.len();
-        
+
         assert_eq!(before, 4);
         assert_eq!(after, 2);
         assert!(servers.contains_key("filesystem"));
@@ -791,26 +807,32 @@ enabled_servers:
         let temp_dir = TempDir::new().unwrap();
         let project_root = temp_dir.path();
         // No config file at all
-        
+
         let mut servers = HashMap::new();
-        servers.insert("a".to_string(), ServerConfig {
-            command: "node".to_string(),
-            args: vec![],
-            env: HashMap::new(),
-            cwd: None,
-            venv: None,
-        });
-        servers.insert("b".to_string(), ServerConfig {
-            command: "node".to_string(),
-            args: vec![],
-            env: HashMap::new(),
-            cwd: None,
-            venv: None,
-        });
-        
+        servers.insert(
+            "a".to_string(),
+            ServerConfig {
+                command: "node".to_string(),
+                args: vec![],
+                env: HashMap::new(),
+                cwd: None,
+                venv: None,
+            },
+        );
+        servers.insert(
+            "b".to_string(),
+            ServerConfig {
+                command: "node".to_string(),
+                args: vec![],
+                env: HashMap::new(),
+                cwd: None,
+                venv: None,
+            },
+        );
+
         let before = servers.len();
         filter_by_enabled_servers(&mut servers, project_root);
-        
+
         // Should keep all since no config
         assert_eq!(servers.len(), before);
     }
@@ -820,26 +842,32 @@ enabled_servers:
         let temp_dir = TempDir::new().unwrap();
         let project_root = temp_dir.path();
         // No config file
-        
+
         let mut servers = HashMap::new();
-        servers.insert("a".to_string(), ServerConfig {
-            command: "node".to_string(),
-            args: vec![],
-            env: HashMap::new(),
-            cwd: None,
-            venv: None,
-        });
-        servers.insert("b".to_string(), ServerConfig {
-            command: "node".to_string(),
-            args: vec![],
-            env: HashMap::new(),
-            cwd: None,
-            venv: None,
-        });
-        
+        servers.insert(
+            "a".to_string(),
+            ServerConfig {
+                command: "node".to_string(),
+                args: vec![],
+                env: HashMap::new(),
+                cwd: None,
+                venv: None,
+            },
+        );
+        servers.insert(
+            "b".to_string(),
+            ServerConfig {
+                command: "node".to_string(),
+                args: vec![],
+                env: HashMap::new(),
+                cwd: None,
+                venv: None,
+            },
+        );
+
         let before = servers.len();
         filter_by_enabled_servers(&mut servers, project_root);
-        
+
         // Should keep all since no config
         assert_eq!(servers.len(), before);
     }
@@ -848,7 +876,7 @@ enabled_servers:
     fn test_load_override_file_returns_empty_for_missing() {
         let temp_dir = TempDir::new().unwrap();
         let project_root = temp_dir.path();
-        
+
         let result = load_override_file(project_root);
         assert!(result.is_empty());
     }
@@ -857,7 +885,7 @@ enabled_servers:
     fn test_load_override_file_parses_valid_config() {
         let temp_dir = TempDir::new().unwrap();
         let project_root = temp_dir.path();
-        
+
         let config_content = r#"{
             "servers": {
                 "test-server": {
@@ -867,7 +895,7 @@ enabled_servers:
             }
         }"#;
         std::fs::write(project_root.join("mcp-servers.json"), config_content).unwrap();
-        
+
         let result = load_override_file(project_root);
         assert!(result.contains_key("test-server"));
     }
@@ -875,7 +903,7 @@ enabled_servers:
     #[test]
     fn test_resolve_vision_model_returns_none_without_config() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         let result = resolve_vision_model(temp_dir.path());
         assert!(result.is_none());
     }
@@ -885,12 +913,14 @@ enabled_servers:
         // Test that filter_tools_by_allowlist doesn't panic without config
         let temp_dir = TempDir::new().unwrap();
         let project_root = temp_dir.path();
-        
+
         let mut mcp_client = McpClient::new(
-            mcp_client::types::McpServersConfig { servers: HashMap::new() },
+            mcp_client::types::McpServersConfig {
+                servers: HashMap::new(),
+            },
             None,
         );
-        
+
         // Should not panic
         filter_tools_by_allowlist(&mut mcp_client, project_root);
     }
