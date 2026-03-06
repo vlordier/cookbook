@@ -6,7 +6,7 @@ pub mod mcp_client;
 use std::collections::HashMap;
 
 use agent_core::{AgentDatabase, ConversationManager, ConfirmationResponse, PermissionStore};
-pub use commands::settings::{AppSettings, SamplingConfig};
+use commands::settings::SamplingConfig;
 use mcp_client::McpClient;
 use tauri::Manager;
 
@@ -536,7 +536,15 @@ fn resolve_vision_model(project_root: &std::path::Path) -> Option<(String, Strin
     None
 }
 
-/// Run the Tauri application.
+/// Initialize and run the Tauri application.
+///
+/// This function:
+/// 1. Initializes tracing to log file
+/// 2. Opens/creates the SQLite database
+/// 3. Configures MCP client
+/// 4. Starts Tauri webview
+///
+/// Exits with code 1 on any fatal error (database, config, or Tauri startup).
 pub fn run() {
     // Initialize tracing FIRST — before any tracing::info!() calls
     init_tracing();
@@ -546,7 +554,11 @@ pub fn run() {
     let db = match AgentDatabase::open(&db_path) {
         Ok(db) => db,
         Err(e) => {
-            tracing::error!(error = %e, path = %db_path, "failed to open agent database");
+            tracing::error!(
+                error = %e,
+                path = %db_path,
+                "failed to open agent database - ensure directory exists and is writable"
+            );
             std::process::exit(1);
         }
     };
@@ -655,7 +667,10 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| {
-            tracing::error!(error = %e, "error while running tauri application");
+            tracing::error!(
+                error = %e,
+                "failed to start Tauri application - check tauri.conf.json and permissions"
+            );
             std::process::exit(1);
         });
 }
