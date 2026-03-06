@@ -346,9 +346,7 @@ pub(crate) fn resolve_project_root() -> std::path::PathBuf {
 /// Load the optional `mcp-servers.json` override file.
 ///
 /// Returns an empty map if the file doesn't exist or can't be parsed.
-fn load_override_file(
-    project_root: &std::path::Path,
-) -> std::collections::HashMap<String, mcp_client::ServerConfig> {
+fn load_override_file(project_root: &std::path::Path) -> HashMap<String, mcp_client::ServerConfig> {
     let candidates = [
         project_root.join("src-tauri/mcp-servers.json"),
         project_root.join("mcp-servers.json"),
@@ -547,7 +545,7 @@ pub fn run() {
     // empty client with a fully initialized one once servers are started.
     // This prevents panics if start_session is called before MCP init completes.
     let empty_mcp_config = mcp_client::types::McpServersConfig {
-        servers: std::collections::HashMap::new(),
+        servers: HashMap::new(),
     };
 
     tauri::Builder::default()
